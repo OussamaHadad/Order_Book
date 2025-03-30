@@ -10,34 +10,65 @@ def generate_orders(output_file_name: str, nOrders: int,
     
     # Generate Orders
     order_types = ["GTC", "FAK", "FOK", "GFD", "M"]
-    order_type_weights = [ratioGTC, ratioFAK, ratioFOK, ratioGFD, ratioM]
     side_types = ["Bid", "Ask"]
-    side_weights = [ratioBid, ratioAsk]
     
     if not canCross:
         minAskPrice = maxBidPrice + 0.01
         maxAskPrice = minAskPrice + (maxBidPrice - minBidPrice) * 2
 
-    order_counts = {t: int(nOrders * w) for t, w in zip(order_types, order_type_weights)}
-    side_counts = {s: int(nOrders * w) for s, w in zip(side_types, side_weights)}
+    # Initialize counts for the order types
+    total_bid_orders = int(nOrders * ratioBid)
+    total_ask_orders = int(nOrders * ratioAsk)
     
-    # Adjusting for rounding errors
-    while sum(order_counts.values()) < nOrders:
-        order_counts[max(order_counts, key = order_counts.get)] += 1
-    while sum(side_counts.values()) < nOrders:
-        side_counts[max(side_counts, key = side_counts.get)] += 1
+    # Create specific counts for GFD for both Bid and Ask, ensuring ratio consistency
+    count_GFD_bid = int(total_bid_orders * ratioGFD)
+    count_GFD_ask = int(total_ask_orders * ratioGFD)
     
-    prices_bid = [round(random.uniform(minBidPrice, maxBidPrice), 2) for _ in range(side_counts["Bid"])]
-    prices_ask = [round(random.uniform(minAskPrice, maxAskPrice), 2) for _ in range(side_counts["Ask"])]
+    # Remaining counts for the other order types
+    remaining_bid_orders = total_bid_orders - count_GFD_bid
+    remaining_ask_orders = total_ask_orders - count_GFD_ask
+    
+    order_counts_bid = {
+        "GTC": int(remaining_bid_orders * ratioGTC / (1 - ratioGFD)),
+        "FAK": int(remaining_bid_orders * ratioFAK / (1 - ratioGFD)),
+        "FOK": int(remaining_bid_orders * ratioFOK / (1 - ratioGFD)),
+        "GFD": count_GFD_bid,
+        "M": int(remaining_bid_orders * ratioM / (1 - ratioGFD))
+    }
+
+    order_counts_ask = {
+        "GTC": int(remaining_ask_orders * ratioGTC / (1 - ratioGFD)),
+        "FAK": int(remaining_ask_orders * ratioFAK / (1 - ratioGFD)),
+        "FOK": int(remaining_ask_orders * ratioFOK / (1 - ratioGFD)),
+        "GFD": count_GFD_ask,
+        "M": int(remaining_ask_orders * ratioM / (1 - ratioGFD))
+    }
+
+    # Adjust for rounding errors
+    while sum(order_counts_bid.values()) < total_bid_orders:
+        order_counts_bid["GTC"] += 1
+    while sum(order_counts_ask.values()) < total_ask_orders:
+        order_counts_ask["GTC"] += 1
+    
+    # Prices generation
+    prices_bid = [round(random.uniform(minBidPrice, maxBidPrice), 2) for _ in range(total_bid_orders)]
+    prices_ask = [round(random.uniform(minAskPrice, maxAskPrice), 2) for _ in range(total_ask_orders)]
     
     orders = []
-    for order_type in order_types:
-        for _ in range(order_counts[order_type]):
-            side = "Bid" if (side_counts["Bid"] > 0) else "Ask"
-            side_counts[side] -= 1
-            price = prices_bid.pop() if (side == "Bid") else prices_ask.pop()
+    
+    # Generate Bid Orders
+    for order_type, count in order_counts_bid.items():
+        for _ in range(count):
+            price = prices_bid.pop()
             shares = random.randint(1, 1000)
-            orders.append(f"{order_type} {side} {price:.2f} {shares}\n")
+            orders.append(f"{order_type} Bid {price:.2f} {shares}\n")
+    
+    # Generate Ask Orders
+    for order_type, count in order_counts_ask.items():
+        for _ in range(count):
+            price = prices_ask.pop()
+            shares = random.randint(1, 1000)
+            orders.append(f"{order_type} Ask {price:.2f} {shares}\n")
     
     random.shuffle(orders)
     
@@ -58,20 +89,26 @@ def generate_orders(output_file_name: str, nOrders: int,
         for order_type in order_types:
             print(f"  {order_type}: {actual_order_counts[side][order_type] / actual_side_counts[side]:.2%}")
     
-    # Generate pie chart
+    # Filter out zero-percentage entries
     labels = [f"{side}-{order_type}" for side in side_types for order_type in order_types]
     sizes = [actual_order_counts[side][order_type] for side in side_types for order_type in order_types]
-    
-    plt.figure(figsize = (10, 6))
-    plt.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, colors=plt.cm.Paired.colors)
-    plt.axis('equal')
-    plt.title("Order Distribution by Side and Type")
-    plt.savefig("order_distribution.png")
-    #plt.show()
-    
-    print("Pie chart saved as 'order_distribution.png'.")
+
+    filtered_labels_sizes = [(label, size) for label, size in zip(labels, sizes) if size > 0]
+    if not filtered_labels_sizes:
+        print("No valid data to plot.")
+    else:
+        labels, sizes = zip(*filtered_labels_sizes)
+
+        plt.figure(figsize=(10, 6))
+        plt.pie(sizes, labels=labels, autopct=lambda p: f'{p:.1f}%' if p > 0 else '', 
+                startangle=140, colors=plt.cm.Paired.colors, pctdistance=0.85, labeldistance=1.1)
+
+        plt.axis('equal')
+        plt.title("Order Distribution by Side and Type")
+        plt.savefig("order_distribution.png")
+        print("Pie chart saved as 'order_distribution.png'.")
 
 
 if __name__ == "__main__":
     # Example usage
-    generate_orders("orders.txt", nOrders = 10)
+    generate_orders("orders.txt", nOrders = 10000)

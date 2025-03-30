@@ -6,3 +6,6 @@
 *.dll
 *.obj
 *.pdb
+
+# Editor/IDE files
+.vscode/

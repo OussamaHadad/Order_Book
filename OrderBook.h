@@ -8,6 +8,7 @@
 #include <map>
 #include <unordered_map>
 #include <mutex>
+#include <random>
 
 struct OrderInfo{
     OrderPointer order{nullptr};
@@ -51,6 +52,21 @@ private:
 public:
     OrderBook();    
     ~OrderBook();
+
+    uint32_t getNumberOfOrders() {return orders.size();}
+    
+    // Helper to get a random order ID from the current orders
+    uint32_t getRandomOrderId(){
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(0, orders.size() - 1);
+        
+        auto it = orders.begin();
+        std::advance(it, dis(gen)); // Move to a random position in the map
+        return it->first;
+    }
+
+    OrderPointer getOrderPtr(uint32_t orderId) {return orders[orderId].order;}
 
     Trades addOrder(OrderPointer orderPtr, bool newOrder = true);
     void cancelOrder(uint32_t orderId, bool lockOn = true);

@@ -1,5 +1,3 @@
-
-
 #include "OrderBook.h"
 
 #include <thread>
@@ -301,6 +299,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
     //std::scoped_lock<std::mutex> lock{_mutex};
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
+    // TO DO: Define these once instead of recomputing it each time an order is added
     std::unordered_map<Type, std::string> map_types = {{Type::GTC, "GTC"}, {Type::FAK, "FAK"}, {Type::FOK, "FOK"}, {Type::GFD, "GFD"}, {Type::M, "M"}};
     std::unordered_map<Side, std::string> map_sides = {{Side::Bid, "Bid"}, {Side::Ask, "Ask"}};
 
