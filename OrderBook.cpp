@@ -301,14 +301,19 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
     //std::scoped_lock<std::mutex> lock{_mutex};
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
+    std::unordered_map<Type, std::string> map_types = {{Type::GTC, "GTC"}, {Type::FAK, "FAK"}, {Type::FOK, "FOK"}, {Type::GFD, "GFD"}, {Type::M, "M"}};
+    std::unordered_map<Side, std::string> map_sides = {{Side::Bid, "Bid"}, {Side::Ask, "Ask"}};
+
     if (newOrder)
         std::cout << "Adding Order: ID " << orderPtr->getOrderId()
-                << ", Side " << static_cast<int>(orderPtr->getOrderSide())
+                << ", Side " << map_sides[orderPtr->getOrderSide()]
+                << " & Type " << map_types[orderPtr->getOrderType()]
                 << ", Price = " << orderPtr->getOrderPrice()
                 << ", Shares = " << orderPtr->getOrderShares() << std::endl;
     else
         std::cout << "Modifying Order of ID " << orderPtr->getOrderId()
-                << " and Side " << static_cast<int>(orderPtr->getOrderSide())
+                << ", Side " << map_sides[orderPtr->getOrderSide()]
+                << " & Type " << map_types[orderPtr->getOrderType()]
                 << ": Price = " << orderPtr->getOrderPrice()
                 << ", Shares = " << orderPtr->getOrderShares() << std::endl;
 

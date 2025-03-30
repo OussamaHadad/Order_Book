@@ -1,9 +1,8 @@
-main.exe
-main.ilk
-main.obj
-main.pdb
-test.obj
-test.pdb
-OrderBook.obj
-OrderBook.pdb
-vc140.pdb
+# Ignore compiled executables
+*.exe
+*.ilk
+
+# Other extensions you want to ignore
+*.dll
+*.obj
+*.pdb
