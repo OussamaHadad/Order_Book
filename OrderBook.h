@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <mutex>
 #include <random>
+#include <chrono>
+#include <numeric>
 
 struct OrderInfo{
     OrderPointer order{nullptr};
@@ -30,6 +32,13 @@ private:
     std::map<double, OrderPointers, std::greater<>> bids;
     std::map<double, OrderPointers> asks;   // std::less<> is the default comparator thus no need to state it explicitly
 
+    std::unordered_map<Type, std::unordered_map<int, std::vector<double>>> addLatencies;
+    std::unordered_map<int, std::vector<double>> amendLatencies, cancelLatencies;
+    /*  addLatencies keys: 0 -> add order with an existing limit level; 1 -> ... new limit level;
+        amendLatencies keys: same as for addLatencies excpet that we are amending orders
+        cancelLatencies keys: 0 -> if the cancelled order is last in its limit level; 1 -> if not   */
+    std::vector<double> matchLatencies;
+    
     // TO DO: Modify the following 3 variables
     std::thread ordersPruneThread_; 
     std::condition_variable shutdownConditionVariable_; 
@@ -41,7 +50,7 @@ private:
 
     void cancelOrders(std::vector<uint32_t> orderIds);
 
-    void updateLimitLevelData(double price, uint32_t shares, Action action);
+    int updateLimitLevelData(double price, uint32_t shares, Action action);
 
     bool canFullyFill(Side side, double price, uint32_t quantity) const;
     
@@ -56,21 +65,19 @@ public:
     uint32_t getNumberOfOrders() {return orders.size();}
     
     // Helper to get a random order ID from the current orders
-    uint32_t getRandomOrderId(){
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> dis(0, orders.size() - 1);
-        
-        auto it = orders.begin();
-        std::advance(it, dis(gen)); // Move to a random position in the map
-        return it->first;
-    }
+    uint32_t getRandomOrderId();
 
     OrderPointer getOrderPtr(uint32_t orderId) {return orders[orderId].order;}
 
-    Trades addOrder(OrderPointer orderPtr, bool newOrder = true);
-    void cancelOrder(uint32_t orderId, bool lockOn = true);
+    Trades addOrder(OrderPointer orderPtr, bool newOrder = true, double initLatencyCount = 0);
+    void cancelOrder(uint32_t orderId, bool lockOn = true, bool amendedOrder = false);
     Trades amendOrder(OrderPointer orderPtr, double newPrice, uint32_t newShares);
 
     void printOrderBook() const;
+
+    void clearLatencies();
+
+    void OrderBook::analyzeLatencies(int nUpdates = -1);
+
+    void writeLatencyStatsToFile(const std::string& filename, int nUpdates = -1);
 };

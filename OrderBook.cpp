@@ -1,9 +1,13 @@
 #include "OrderBook.h"
 
 #include <thread>
-#include <mutex>
 #include <shared_mutex>
 #include <algorithm>
+#include <numeric>
+#include <cassert>
+#include <fstream>
+#include <iostream>
+
 
 // TO DO: Modify
 void OrderBook::cancelGFDOrders(uint32_t TRADING_CLOSE_HOUR){ 
@@ -70,11 +74,16 @@ void OrderBook::cancelOrders(std::vector<uint32_t> orderIds){
 }
 
 
-void OrderBook::updateLimitLevelData(double price, uint32_t shares, Action action) {
-    /* Arguments:
-        price: used to identify the limit level
-        shares: the number of shares subject to action
-        action: the type of action that is applied to the limit level
+int OrderBook::updateLimitLevelData(double price, uint32_t shares, Action action){
+    /*  Arguments:
+            price: used to identify the limit level
+            shares: the number of shares subject to action
+            action: the type of action that is applied to the limit level
+
+        Returns:
+            -1: if the last order from the limit level was removed
+             1: if a new limit level was added
+             0: else
     */
 
     // Check if the price exists in the data map
@@ -87,7 +96,7 @@ void OrderBook::updateLimitLevelData(double price, uint32_t shares, Action actio
         else
             // If the price does not exist and the action is not Add, do nothing
             std::cerr << "Error: Attempted to modify a non-existent limit level with price " << price << std::endl;
-        return;
+        return 1;
     }
 
     // Access the limit level
@@ -101,7 +110,10 @@ void OrderBook::updateLimitLevelData(double price, uint32_t shares, Action actio
     // Remove the limit level if it is empty
     if (limitLevel.totalOrders == 0) {
         data.erase(price);
+        return -1;
     }
+    
+    return 0;
 }
 
 
@@ -177,7 +189,6 @@ Trades OrderBook::matchOrders(){
     /* Match all possible orders from the orderbook, and return the trades.
         Finally, we check if there is any Fill And Kill order that was triggered but not fullt executed to cancel it. 
     */
-
     Trades trades;
 
     while (true){
@@ -201,6 +212,8 @@ Trades OrderBook::matchOrders(){
 
         // Match orders at the best bid & ask prices
         while (!bestBids.empty() && !bestAsks.empty()){
+
+            auto start = std::chrono::high_resolution_clock::now(); // Start of time computation
 
             auto headBid = bestBids.front();
             auto headAsk = bestAsks.front();
@@ -231,8 +244,13 @@ Trades OrderBook::matchOrders(){
             ));
 
             // Update limit level data
-            updateLimitLevelData(headBid->getOrderPrice(), tradedShares, headBid->isFilled() ? Action::Remove : Action::Match);
-            updateLimitLevelData(headAsk->getOrderPrice(), tradedShares, headAsk->isFilled() ? Action::Remove : Action::Match);
+            (void) updateLimitLevelData(headBid->getOrderPrice(), tradedShares, headBid->isFilled() ? Action::Remove : Action::Match);
+            (void) updateLimitLevelData(headAsk->getOrderPrice(), tradedShares, headAsk->isFilled() ? Action::Remove : Action::Match);
+
+            auto end = std::chrono::high_resolution_clock::now(); // End of time computation
+            std::chrono::duration<double, std::micro> latency = end - start;
+
+            matchLatencies.push_back(latency.count());
         }
 
         // Remove empty price levels
@@ -287,7 +305,18 @@ OrderBook::~OrderBook(){
 }
 
 
-Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
+uint32_t OrderBook::getRandomOrderId(){
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, orders.size() - 1);
+    
+    auto it = orders.begin();
+    std::advance(it, dis(gen)); // Move to a random position in the map
+    return it->first;
+}
+
+
+Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLatencyCount){
     /*  Given an order pointer we do the following:
             1. If the order is Fill And/Or Kill, then we first check if it's possible to fill it partially/completely
             2. If the order is a Market order then we  turn it into a Good Till Cancel order with the worst possible price to make sure
@@ -296,6 +325,8 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
         After that, we update the limit level.
         Finally we match orders. 
     */
+    auto start = std::chrono::high_resolution_clock::now();
+
     //std::scoped_lock<std::mutex> lock{_mutex};
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
@@ -318,16 +349,25 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
 
     if (orders.find(orderPtr->getOrderId()) != orders.end()){
         std::cout << "Order ID already exists. Skipping." << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};  // equivalent of None for the return type (Trades in this case)
     }
 
     if (orderPtr->getOrderType() == Type::FAK && !canMatch(orderPtr->getOrderSide(), orderPtr->getOrderPrice())){
         std::cout << "FAK order cannot be matched. Skipping." << std::endl;    
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};
     }
 
     else if (orderPtr->getOrderType() == Type::FOK && !canFullyFill(orderPtr->getOrderSide(), orderPtr->getOrderPrice(), orderPtr->getOrderShares())){
         std::cout << "FOK order cannot be fully filled. Skipping." << std::endl;
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};
     }
 
@@ -348,6 +388,9 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
         }
         else{
             std::cout << "Market order cannot be processed. Skipping." << std::endl;
+            auto end = std::chrono::high_resolution_clock::now();
+            std::chrono::duration<double, std::micro> latency = end - start;
+            addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
             return {};
         }
     }
@@ -373,19 +416,32 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder){
 
     orders.insert({orderPtr->getOrderId(), OrderInfo{orderPtr, iterator}});
 
-    updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Add);
+    auto addLatenciesKey = updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Add);
+
+    if (newOrder){
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        addLatencies[orderPtr->getOrderType()][addLatenciesKey].push_back(latency.count());
+    }
+    else{
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        amendLatencies[addLatenciesKey].push_back(initLatencyCount + latency.count()); // amendLatenciesKey not add...
+    }
 
     return matchOrders();
 }
 
 
-void OrderBook::cancelOrder(uint32_t orderId, bool lockOn){
+void OrderBook::cancelOrder(uint32_t orderId, bool lockOn, bool amendedOrder){
     /* Arguments:
         orderId: used to identify the order
         lockOn: used to activate the scoped lock. As in case we are deleting many orders we would like to activate the lock only once, before we start the deletion
         
     This function cancels an order by removing it from orders map, then asks or bids map given its side, and finally updates its limit level.
     */
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (lockOn)
         std::unique_lock<std::mutex> ordersLock{_mutex};    
     //std::scoped_lock lock{_mutex};
@@ -418,11 +474,19 @@ void OrderBook::cancelOrder(uint32_t orderId, bool lockOn){
     }
 
     // Update order's limit level
-    updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Remove);
+    auto cancelLatenciesKey = updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Remove);
+
+    if (!amendedOrder){
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double, std::micro> latency = end - start;
+        cancelLatencies[cancelLatenciesKey].push_back(latency.count());
+    }
 }
 
 
 Trades OrderBook::amendOrder(OrderPointer existingOrderPtr, double newPrice, uint32_t newShares){
+    auto start = std::chrono::high_resolution_clock::now();
+
     if (newPrice < 0)
         throw std::logic_error(
             (std::ostringstream{} << "Order (" << existingOrderPtr->getOrderId() << ") can't be modified as the new price is negative").str()
@@ -441,13 +505,16 @@ Trades OrderBook::amendOrder(OrderPointer existingOrderPtr, double newPrice, uin
         return {};
     }
 
-    cancelOrder(existingOrderPtr->getOrderId());
+    cancelOrder(existingOrderPtr->getOrderId(), true, true);
 
     auto newOrderPtr = std::make_shared<Order> (
         existingOrderPtr->getOrderId(), existingOrderPtr->getOrderType(), existingOrderPtr->getOrderSide(), newPrice, newShares
     );
 
-    return addOrder(newOrderPtr, false);
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::micro> initLatency = end - start;
+
+    return addOrder(newOrderPtr, false, initLatency.count());
 }
 
 
@@ -480,3 +547,82 @@ void OrderBook::printOrderBook() const {
                     << ", Number of Shares = " << totalShares << std::endl;
     }
 }
+
+
+void OrderBook::clearLatencies() {
+    addLatencies.clear();
+    amendLatencies.clear();
+    cancelLatencies.clear();
+    matchLatencies.clear();
+}
+
+
+void OrderBook::writeLatencyStatsToFile(const std::string& filename, int nUpdates) {
+    
+    std::ofstream file(filename);
+    if (!file.is_open())
+        throw std::runtime_error("Failed to open file for writing latency statistics.");
+
+    // Header
+    file << "order,type,limit_level_status,mean_latency,latency_variance,number_of_orders\n";
+
+    int totalTransactions = 0;
+
+    auto computeStats = [](const std::vector<double>& latencies) -> std::pair<double, double> {
+        if (latencies.empty()) 
+            return {0.0, 0.0};
+
+        double mean = std::accumulate(latencies.begin(), latencies.end(), 0.0) / latencies.size();
+        double variance = 0.0;
+        for (double latency : latencies)
+            variance += (latency - mean) * (latency - mean);
+        variance /= latencies.size();
+        
+        return {mean, variance};
+    };
+
+    // Write Add Order latencies
+    for (const auto& type_latencyMap : addLatencies) {
+        auto orderType = static_cast<int>(type_latencyMap.first);
+        for (const auto& latencyEntry : type_latencyMap.second) {
+            int limitLevelStatus = latencyEntry.first;
+            auto stats = computeStats(latencyEntry.second);
+
+            file << "Add," << orderType << "," << limitLevelStatus << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+
+            totalTransactions += latencyEntry.second.size();
+        }
+    }
+
+    // Write Amend Order latencies
+    for (const auto& latencyEntry : amendLatencies) {
+        int limitLevelStatus = latencyEntry.first;
+        auto stats = computeStats(latencyEntry.second);
+
+        file << "Amend," << limitLevelStatus << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+
+        totalTransactions += latencyEntry.second.size();
+    }
+
+    // Write Cancel Order latencies
+    for (const auto& latencyEntry : cancelLatencies) {
+        auto stats = computeStats(latencyEntry.second);
+
+        file << "Cancel," << latencyEntry.first << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+
+        totalTransactions += latencyEntry.second.size();
+    }
+
+    // Write Match latencies
+    auto matchStats = computeStats(matchLatencies);
+    file << "Match,None," << matchStats.first << "," << matchStats.second << "," << matchLatencies.size() << "\n";
+
+    // Verify that the total count equals nUpdates
+    std::cout << "\nTotal Transactions Counted: " << totalTransactions << " | Expected: " << nUpdates << "\n";
+    if (nUpdates != -1 && totalTransactions != nUpdates)
+        throw std::runtime_error("Mismatch in total number of updates!");
+
+    file.close();
+    std::cout << "Latency statistics written to " << filename << std::endl;
+}
+

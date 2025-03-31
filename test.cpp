@@ -48,11 +48,6 @@ auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
     return orderId;
 }
 
-    
-double avg_latency(const std::vector<double>& latencies) {
-    return latencies.empty() ? 0.0 : std::accumulate(latencies.begin(), latencies.end(), 0.0) / latencies.size();
-}
-
 
 void updateOrderBook(OrderBook& orderBook, int nUpdates, 
                     double addProb = 0.3, double cancelProb = 0.1, double amendProb = 0.6, 
@@ -62,6 +57,7 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
         given the input parameters.
         At the same time, the latency of each type of orders is being computed and reported to evaluate the performance of the implementation.
     */
+    orderBook.clearLatencies();
 
     // Assuming mean_shares and mean_price are defined elsewhere
     std::random_device rd;
@@ -78,9 +74,6 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
     Type types[] = {Type::GTC, Type::FAK, Type::FOK, Type::GFD, Type::M};
     Side sides[] = {Side::Bid, Side::Ask};
 
-    // Latency measurements
-    std::vector<double> addLatencies, amendLatencies, cancelLatencies;
-
     for (int i = 0; i < nUpdates; ++i){
         // Randomly choose action based on these probabilities
         double actionDecision = static_cast<double>(rand()) / RAND_MAX;
@@ -94,12 +87,7 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
 
             auto newOrder = std::make_shared<Order> (newOrderId, type, side, newPrice, newShares);
 
-
-            auto start = std::chrono::high_resolution_clock::now();
-            orderBook.addOrder(newOrder);                               // Add Order
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::micro> latency = end - start;
-            addLatencies.push_back(latency.count());
+            orderBook.addOrder(newOrder);
         }
         else if (actionDecision < addProb + amendProb){ // Amend order
             uint32_t orderId = orderBook.getRandomOrderId();
@@ -107,40 +95,28 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
             double newPrice = std::max(1.0, priceDist(gen)); // Ensure price is positive
             int newShares = std::max(5, static_cast<int>(shareDist(gen))); // Ensure shares are positive
             
-            auto start = std::chrono::high_resolution_clock::now();
-            auto unused = orderBook.amendOrder(orderPtr, newPrice, newShares);  // Amend order
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::micro> latency = end - start;
-            amendLatencies.push_back(latency.count());
+            (void) orderBook.amendOrder(orderPtr, newPrice, newShares);
         }
         else { // Cancel order
             uint32_t orderId = orderBook.getRandomOrderId();
 
-            auto start = std::chrono::high_resolution_clock::now();
-            orderBook.cancelOrder(orderId);                             // Cancel order
-            auto end = std::chrono::high_resolution_clock::now();
-            std::chrono::duration<double, std::micro> latency = end - start;
-            cancelLatencies.push_back(latency.count());
+            orderBook.cancelOrder(orderId);
         }    
     }
-
-    std::cout << "Average Add Latency: " << avg_latency(addLatencies) << " µs\n";
-    std::cout << "Average Amend Latency: " << avg_latency(amendLatencies) << " µs\n";
-    std::cout << "Average Cancel Latency: " << avg_latency(cancelLatencies) << " µs\n";
-
 }
 
 
 int main(){
-    std::string filename = "orders.txt";
+    std::string ordersFilename = "orders.txt";
+    std::string resultsFilename = "stats.txt";
     size_t nUpdates = 1000;
     OrderBook orderBook;
 
-    size_t nextOrderId = populateOrderBook(filename, orderBook);
+    size_t nextOrderId = populateOrderBook(ordersFilename, orderBook);
     //orderBook.printOrderBook();
 
     updateOrderBook(orderBook, nUpdates);
-    //orderBook.printOrderBook();
 
-    return 0;
+    orderBook.writeLatencyStatsToFile(resultsFilename, nUpdates);
 }
+
