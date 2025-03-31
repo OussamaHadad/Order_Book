@@ -16,9 +16,7 @@ private:
 
 public:
     // Constructor
-    Trade(const TradeInfo& _bidTrade, const TradeInfo& _askTrade)
-    : bidTrade(_bidTrade), askTrade(_askTrade)
-    {}
+    Trade(const TradeInfo& _bidTrade, const TradeInfo& _askTrade): bidTrade(_bidTrade), askTrade(_askTrade){}
 
     // Getters
     TradeInfo getBidTrade() const {return bidTrade;}
@@ -26,9 +24,7 @@ public:
 
     // Method to get trade details as a string
     void getTradeDetails() const {
-        std::cout   << "  Bid ID = " << bidTrade.orderId
-                    << ", Ask ID = " << askTrade.orderId
-                    << ", Shares = " << bidTrade.shares << std::endl;
+        std::cout << "  Bid ID = " << bidTrade.orderId << ", Ask ID = " << askTrade.orderId << ", Shares = " << bidTrade.shares << std::endl;
     } 
 };
 

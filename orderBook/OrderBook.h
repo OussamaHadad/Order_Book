@@ -77,7 +77,5 @@ public:
 
     void clearLatencies();
 
-    void OrderBook::analyzeLatencies(int nUpdates = -1);
-
     void writeLatencyStatsToFile(const std::string& filename, int nUpdates = -1);
 };
