@@ -4,51 +4,52 @@
 #include <shared_mutex>
 #include <algorithm>
 #include <numeric>
-#include <cassert>
 #include <fstream>
 #include <iostream>
 
 
-// TO DO: Modify
 void OrderBook::cancelGFDOrders(uint32_t TRADING_CLOSE_HOUR){ 
-    /*Cancel all Good For Day orders when the market closes*/
-    using namespace std::chrono;
-    const auto end = hours(16);
+    /*Cancel all Good For Day orders when the market closes at TRADING_CLOSE_HOUR*/
+    using namespace std::chrono;    // Import everything from std::chrono
 
-	while (true)
-	{
+    const auto closeTime = hours(TRADING_CLOSE_HOUR);  // Trading close hour set to TRADING_CLOSE_HOUR:00
+
+	while (true) {
+        // Get the current system time
 		const auto now = system_clock::now();
 		const auto now_c = system_clock::to_time_t(now);
-		std::tm now_parts;
-		localtime_s(&now_parts, &now_c);
+		std::tm now_parts;		
+        localtime_s(&now_parts, &now_c);
 
-		if (now_parts.tm_hour >= end.count())
-			now_parts.tm_mday += 1;
+        // Adjust the time if it's past the close hour
+        if (now_parts.tm_hour >= closeTime.count())
+            now_parts.tm_mday += 1;  // Move to the next day if past close time
 
-		now_parts.tm_hour = end.count();
+        // Set the target time to TRADING_CLOSE_HOUR:00 (market close)
+		now_parts.tm_hour = closeTime.count();
 		now_parts.tm_min = 0;
 		now_parts.tm_sec = 0;
 
-		auto next = system_clock::from_time_t(mktime(&now_parts));
-		auto till = next - now + milliseconds(100);
+        // Convert to system_clock time
+        auto nextCloseTime = system_clock::from_time_t(mktime(&now_parts));
+        auto waitDuration = nextCloseTime - now + milliseconds(100);  // Allow a small buffer of 100 milliseconds
 
+        // Wait for the market close or shutdown signal
 		{
-            //std::scoped_lock ordersLock{ _mutex };
-			std::unique_lock<std::mutex> ordersLock{_mutex};
+            std::unique_lock<std::mutex> ordersLock{_mutex};
 
-			if (shutdown_.load(std::memory_order_acquire) ||
-				shutdownConditionVariable_.wait_for(ordersLock, till) == std::cv_status::no_timeout)
+            // Wait for shutdown signal or timeout
+            if (shutdown.load(std::memory_order_acquire) ||
+                            shutdownConditionVariable.wait_for(ordersLock, waitDuration) == std::cv_status::no_timeout)
 				return;
 		}
 
-		std::vector<uint32_t> orderIds;
+		std::vector<uint32_t> GFDorderIds;
 
+        // Collect order IDs for GFD orders
 		{
-			//std::scoped_lock ordersLock{ _mutex };
             std::unique_lock<std::mutex> lock{_mutex};
 
-			/*for (const auto& [_, entry] : orders){
-				const auto& [order, _] = entry;*/
             for (const auto& item : orders) {
                 const OrderInfo& entry = item.second;
                 const OrderPointer& orderPtr = entry.order;
@@ -56,17 +57,16 @@ void OrderBook::cancelGFDOrders(uint32_t TRADING_CLOSE_HOUR){
 				if (orderPtr->getOrderType() != Type::GFD)
 					continue;
 
-				orderIds.push_back(orderPtr->getOrderId());
+                    GFDorderIds.push_back(orderPtr->getOrderId());
 			}
 		}
 
-		cancelOrders(orderIds);
+		cancelOrders(GFDorderIds);
 	}
 }
 
 
 void OrderBook::cancelOrders(std::vector<uint32_t> orderIds){
-    //std::scoped_lock lock{_mutex};
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
     for (auto orderId : orderIds)
@@ -116,44 +116,44 @@ int OrderBook::updateLimitLevelData(double price, uint32_t shares, Action action
     return 0;
 }
 
-
+// TO DO (all what's left): Reformulate this function completely as it has some logical inconsistencies
 bool OrderBook::canFullyFill(Side side, double price, uint32_t quantity) const{
-    /* Tells if an order can be fully filled or not */
+    /* Tells if an order can be fully filled or not (We only use it for Fill Or Kill orders) */
 
-    if (!canMatch(side, price)) // if this order has no match then obviously it can't be fully filled
+    if (!canMatch(side, price)) // Early exit if the order can't match at all
         return false;
 
-    // TO DO: Only useful if the 1st condition is written in the next loop
+    if (quantity == 0)  // If quantity is zero, we can consider it fully filled
+        return true;
+
+    // TO DO 1: Only useful if the 1st condition is written in the next loop
     double oppositeHeadPrice = -1; // or use optional<double>
 
     if (side == Side::Bid){
-        //const auto& [bestAskPrice, _] = *asks.begin();
         const auto& item = *asks.begin();
         double bestAskPrice = item.first;
         oppositeHeadPrice = bestAskPrice;
     }
     else{
-        //const auto& [bestBidPrice, _] = *bids.begin();
         const auto& item = *bids.begin();
         double bestBidPrice = item.first;
         oppositeHeadPrice = bestBidPrice;
     }
 
-    // TO DO: turn data into map (not unordered_map) and then update this loop to break once nothing can change
-    //for (const auto& [limitLevelPrice, limitLevelData] : data){
+    // TO DO 2: turn data into map (not unordered_map) and then update this loop to break once nothing can change
     for (const auto& item : data){
         double limitLevelPrice = item.first;
         LimitLevelData limitLevelData = item.second;
 
-        // TO DO: Add 1st condition?
+        // TO DO 3: Add 1st condition?
 
         if ((side == Side::Bid && limitLevelPrice > price) || (side == Side::Ask && limitLevelPrice < price))
             continue;
 
         if (quantity <= limitLevelData.totalShares)
             return true;
-        else
-            quantity -= limitLevelData.totalShares;
+        
+        quantity -= limitLevelData.totalShares;
     }
 
     return false;
@@ -196,8 +196,6 @@ Trades OrderBook::matchOrders(){
         if (bids.empty() || asks.empty())
             break;
 
-        // auto& [bestBidPrice, bestBids] = *bids.begin();
-        // auto& [bestAskPrice, bestAsks] = *asks.begin();
         auto& itemBid = *bids.begin();
         double bestBidPrice = itemBid.first;
         OrderPointers& bestBids = itemBid.second;
@@ -220,7 +218,8 @@ Trades OrderBook::matchOrders(){
 
             uint32_t tradedShares = std::min(headBid->getOrderShares(), headAsk->getOrderShares());
 
-            // TO DO: What if order is FOK? We can use canFullyFill(...) to tell if this order should pass or not
+            /*  Q: What if order is FOK? We can use canFullyFill(...) to tell if this order should pass or not
+                A: FOK orders that can't be executed are discarded during the add phase    */
             
             // Fill the orders
             headBid->fillOrder(tradedShares);
@@ -291,17 +290,23 @@ Trades OrderBook::matchOrders(){
 }
 
 
-// TO DO: Modify
-OrderBook::OrderBook() 
-: ordersPruneThread_{ [this] { cancelGFDOrders(); } } 
-{ }
+OrderBook::OrderBook() {
+    ordersPruneThread = std::thread([this] {
+                                                cancelGFDOrders();
+                                            }
+                                    );
+}
 
+OrderBook::~OrderBook(){
+    // Signal the background thread to stop
+    shutdown.store(true, std::memory_order_release);
 
-// TO DO: Modify
-OrderBook::~OrderBook(){ 
-    shutdown_.store(true, std::memory_order_release);
-	shutdownConditionVariable_.notify_one();
-	ordersPruneThread_.join();
+    // Wake up the thread if it's waiting
+	shutdownConditionVariable.notify_one();
+    
+    // Wait for the background thread to finish
+    if (ordersPruneThread.joinable())
+	    ordersPruneThread.join();
 }
 
 
@@ -327,10 +332,8 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
     */
     auto start = std::chrono::high_resolution_clock::now();
 
-    //std::scoped_lock<std::mutex> lock{_mutex};
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
-    // TO DO: Define these once instead of recomputing it each time an order is added
     std::unordered_map<Type, std::string> map_types = {{Type::GTC, "GTC"}, {Type::FAK, "FAK"}, {Type::FOK, "FOK"}, {Type::GFD, "GFD"}, {Type::M, "M"}};
     std::unordered_map<Side, std::string> map_sides = {{Side::Bid, "Bid"}, {Side::Ask, "Ask"}};
 
@@ -348,7 +351,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
                 << ", Shares = " << orderPtr->getOrderShares() << std::endl;
 
     if (orders.find(orderPtr->getOrderId()) != orders.end()){
-        std::cout << "Order ID already exists. Skipping." << std::endl;
+        std::cout << "Order ID " << orderPtr->getOrderId() << " already exists. Skipping." << std::endl;
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
         addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
@@ -375,13 +378,11 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
         /* Turn the market order into a Good Till Cancel order with the "worst" possible price, thus we are sure all orders
             from the opposite side match our order */
         if (orderPtr->getOrderSide() == Side::Bid && !asks.empty()){
-            //const auto& [worstAskPrice, _] = *asks.rbegin();
             const auto& item = *asks.rbegin();
             double worstAskPrice = item.first;
             orderPtr->marketToGTC(worstAskPrice);
         }
         else if (orderPtr->getOrderSide() == Side::Ask && !bids.empty()) {
-            //const auto& [worstBidPrice, _] = *bids.rbegin();
             const auto& item = *bids.rbegin();
             double worstBidPrice = item.first;
             orderPtr->marketToGTC(worstBidPrice);
@@ -444,12 +445,10 @@ void OrderBook::cancelOrder(uint32_t orderId, bool lockOn, bool amendedOrder){
 
     if (lockOn)
         std::unique_lock<std::mutex> ordersLock{_mutex};    
-    //std::scoped_lock lock{_mutex};
 
     if (orders.find(orderId) == orders.end())
         return;
 
-    //const auto& [orderPtr, orderIterator] = orders.at(orderId);
     const auto& item = orders.at(orderId);
     OrderPointer orderPtr = item.order;
     OrderPointers::iterator orderIterator = item.orderIter; 
@@ -497,15 +496,18 @@ Trades OrderBook::amendOrder(OrderPointer existingOrderPtr, double newPrice, uin
             (std::ostringstream{} << "Order (" << existingOrderPtr->getOrderId() << ") can't be modified as the new number of shares should be strictly positive").str()
         );
 
-    // TO DO: why use lock or not?
-    Type orderType = existingOrderPtr->getOrderType();
-    
-    if (orders.find(existingOrderPtr->getOrderId()) == orders.end()){
-        std::cout << "Inexistent order. Can't be modified." << std::endl;
-        return {};
-    }
+    {   // Use lock to avoid executing this order while it is being modified
+        std::unique_lock<std::mutex> lock{_mutex};
 
-    cancelOrder(existingOrderPtr->getOrderId(), true, true);
+        Type orderType = existingOrderPtr->getOrderType();
+        
+        if (orders.find(existingOrderPtr->getOrderId()) == orders.end()){
+            std::cout << "Inexistent order. Can't be modified." << std::endl;
+            return {};
+        }
+
+        cancelOrder(existingOrderPtr->getOrderId(), false, true);
+    }
 
     auto newOrderPtr = std::make_shared<Order> (
         existingOrderPtr->getOrderId(), existingOrderPtr->getOrderType(), existingOrderPtr->getOrderSide(), newPrice, newShares
@@ -519,8 +521,6 @@ Trades OrderBook::amendOrder(OrderPointer existingOrderPtr, double newPrice, uin
 
 
 void OrderBook::printOrderBook() const {
-    //std::unique_lock<std::mutex> ordersLock{_mutex}; // Ensure thread safety
-
     std::cout << "Order Book:" << std::endl;
 
     // Print Bids
@@ -615,14 +615,14 @@ void OrderBook::writeLatencyStatsToFile(const std::string& filename, int nUpdate
 
     // Write Match latencies
     auto matchStats = computeStats(matchLatencies);
-    file << "Match,None," << matchStats.first << "," << matchStats.second << "," << matchLatencies.size() << "\n";
+    file << "Match,-1, " << matchStats.first << "," << matchStats.second << "," << matchLatencies.size() << "\n";
 
     // Verify that the total count equals nUpdates
     std::cout << "\nTotal Transactions Counted: " << totalTransactions << " | Expected: " << nUpdates << "\n";
     if (nUpdates != -1 && totalTransactions != nUpdates)
         throw std::runtime_error("Mismatch in total number of updates!");
 
-    file.close();
     std::cout << "Latency statistics written to " << filename << std::endl;
+    file.close();
 }
 

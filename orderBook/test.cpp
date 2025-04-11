@@ -4,10 +4,15 @@
 #include <memory>
 #include <chrono>
 #include <numeric>
+#include <cassert>
 
 #include "Order.cpp"
 #include "OrderBook.cpp"
 
+
+// The following variables are made static to make then "non-importable" by other .h or .cpp files
+static std::unordered_map<std::string, Type> _map_types = {{"GTC", Type::GTC}, {"FAK", Type::FAK}, {"FOK", Type::FOK}, {"GFD", Type::GFD}, {"M", Type::M}};
+static std::unordered_map<std::string, Side> _map_sides = {{"Bid", Side::Bid}, {"Ask", Side::Ask}};
 
 auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
     /*
@@ -23,10 +28,6 @@ auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
     
     std::string line;
     int orderId = 1;
-    
-    // TO DO: remove; check addOrder() method
-    std::unordered_map<std::string, Type> map_types = {{"GTC", Type::GTC}, {"FAK", Type::FAK}, {"FOK", Type::FOK}, {"GFD", Type::GFD}, {"M", Type::M}};
-    std::unordered_map<std::string, Side> map_sides = {{"Bid", Side::Bid}, {"Ask", Side::Ask}};
 
     while (std::getline(inputFile, line)){
         std::istringstream iss(line);
@@ -40,7 +41,7 @@ auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
             continue;   // Move to next order
         }
         
-        auto order = std::make_shared<Order>(orderId, map_types[typeStr], map_sides[sideStr], price, shares);
+        auto order = std::make_shared<Order>(orderId, _map_types[typeStr], _map_sides[sideStr], price, shares);
         orderBook.addOrder(order);
         ++orderId;
     }
@@ -51,7 +52,7 @@ auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
 }
 
 
-void updateOrderBook(OrderBook& orderBook, int nUpdates, 
+void updateOrderBook(OrderBook& orderBook, int nUpdates, uint32_t newOrderId,
                     double addProb = 0.3, double cancelProb = 0.1, double amendProb = 0.6, 
                     int meanShares = 50, double meanPrice = 30.00){
     /*
@@ -81,7 +82,8 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
         double actionDecision = static_cast<double>(rand()) / RAND_MAX;
 
         if (actionDecision < addProb){  // Add order
-            uint32_t newOrderId = orderBook.getNumberOfOrders() + 1;    
+            std::cout << "Add a new order" << std::endl;
+            newOrderId += 1;    
             Type type = types[typeDist(gen)];
             Side side = sides[sideDist(gen)];
             double newPrice = std::max(1.0, priceDist(gen)); // Ensure price is positive
@@ -92,6 +94,7 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
             orderBook.addOrder(newOrder);
         }
         else if (actionDecision < addProb + amendProb){ // Amend order
+            std::cout << "Modify existing order" << std::endl;
             uint32_t orderId = orderBook.getRandomOrderId();
             auto orderPtr = orderBook.getOrderPtr(orderId);
             double newPrice = std::max(1.0, priceDist(gen)); // Ensure price is positive
@@ -100,6 +103,7 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
             (void) orderBook.amendOrder(orderPtr, newPrice, newShares);
         }
         else { // Cancel order
+            std::cout << "Cancel existing order" << std::endl;
             uint32_t orderId = orderBook.getRandomOrderId();
 
             orderBook.cancelOrder(orderId);
@@ -109,15 +113,21 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates,
 
 
 int main(){
+    std::mt19937 rng(42);  // 42 is the seed
+
     std::string ordersFilename = "orders.txt";
     std::string resultsFilename = "stats.txt";
     size_t nUpdates = 1000;
+    
     OrderBook orderBook;
 
     size_t nextOrderId = populateOrderBook(ordersFilename, orderBook);
+    std::cout << "\n ******************** \n Order Book initialized and populated with " 
+          << nextOrderId 
+          << " orders \n ********************  \n" << std::endl;
     //orderBook.printOrderBook();
 
-    updateOrderBook(orderBook, nUpdates);
+    updateOrderBook(orderBook, nUpdates, nextOrderId);
 
     orderBook.writeLatencyStatsToFile(resultsFilename, nUpdates);
 }

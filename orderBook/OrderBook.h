@@ -18,8 +18,8 @@ struct OrderInfo{
 };
 
 struct LimitLevelData{
-    uint32_t totalShares{};
-    uint32_t totalOrders{};
+    uint32_t totalShares = 0;
+    uint32_t totalOrders = 0;
 };
 
 
@@ -39,10 +39,9 @@ private:
         cancelLatencies keys: 0 -> if the cancelled order is last in its limit level; 1 -> if not   */
     std::vector<double> matchLatencies;
     
-    // TO DO: Modify the following 3 variables
-    std::thread ordersPruneThread_; 
-    std::condition_variable shutdownConditionVariable_; 
-    std::atomic<bool> shutdown_{ false };   
+    std::thread ordersPruneThread; 
+    std::condition_variable shutdownConditionVariable; 
+    std::atomic<bool> shutdown = false;   
     
     std::mutex _mutex;
 
