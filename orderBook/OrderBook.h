@@ -29,8 +29,8 @@ private:
     std::unordered_map<uint32_t, OrderInfo> orders;
 
     // We use map not unordered_map for both bids & asks since limit levels are ordered given their prices
-    std::map<double, OrderPointers, std::greater<>> bids;
-    std::map<double, OrderPointers> asks;   // std::less<> is the default comparator thus no need to state it explicitly
+    std::map<double, OrderPointers, std::greater<>> bids; // [bidPrice, list of orders of price bidPrice]
+    std::map<double, OrderPointers> asks;   // std::less<> is the default comparator thus no need to state it explicitly // [askPrice, list of orders of price askPrice]
 
     std::unordered_map<Type, std::unordered_map<int, std::vector<double>>> addLatencies;
     std::unordered_map<int, std::vector<double>> amendLatencies, cancelLatencies;

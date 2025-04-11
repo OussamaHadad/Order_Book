@@ -1,7 +1,6 @@
 #include "Order.h"
 
 
-
 Order::Order(uint32_t _orderId, Type _type, Side _side, double _price, uint32_t _shares)
 : orderId(_orderId), type(_type), side(_side)
 {

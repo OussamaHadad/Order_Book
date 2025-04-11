@@ -116,44 +116,42 @@ int OrderBook::updateLimitLevelData(double price, uint32_t shares, Action action
     return 0;
 }
 
-// TO DO (all what's left): Reformulate this function completely as it has some logical inconsistencies
+
 bool OrderBook::canFullyFill(Side side, double price, uint32_t quantity) const{
     /* Tells if an order can be fully filled or not (We only use it for Fill Or Kill orders) */
 
     if (!canMatch(side, price)) // Early exit if the order can't match at all
         return false;
 
-    if (quantity == 0)  // If quantity is zero, we can consider it fully filled
-        return true;
+    if (side == Side::Bid){    // We are buying, thus match against asks (ascending)
+        for (const auto& item : asks){
+            Price askPrice = item.first;
+            auto& askOrders = item.second;
 
-    // TO DO 1: Only useful if the 1st condition is written in the next loop
-    double oppositeHeadPrice = -1; // or use optional<double>
+            if (askPrice > price)
+                break; // Can't match beyond the bid price
 
-    if (side == Side::Bid){
-        const auto& item = *asks.begin();
-        double bestAskPrice = item.first;
-        oppositeHeadPrice = bestAskPrice;
+            for (const auto& orderPtr : askOrders) {
+                quantity -= orderPtr->getOrderShares();
+                if (quantity <= 0)
+                    return true;
+            }
+        }
     }
-    else{
-        const auto& item = *bids.begin();
-        double bestBidPrice = item.first;
-        oppositeHeadPrice = bestBidPrice;
-    }
+    else {  // We are selling, thus match against bids (descending)
+        for (const auto& item : bids){
+                Price bidPrice = item.first;
+                auto& bidOrders = item.second;
 
-    // TO DO 2: turn data into map (not unordered_map) and then update this loop to break once nothing can change
-    for (const auto& item : data){
-        double limitLevelPrice = item.first;
-        LimitLevelData limitLevelData = item.second;
+            if (bidPrice < price)
+                break; // Can't match below the ask price
 
-        // TO DO 3: Add 1st condition?
-
-        if ((side == Side::Bid && limitLevelPrice > price) || (side == Side::Ask && limitLevelPrice < price))
-            continue;
-
-        if (quantity <= limitLevelData.totalShares)
-            return true;
-        
-        quantity -= limitLevelData.totalShares;
+            for (const auto& orderPtr : bidOrders) {
+                quantity -= orderPtr->getOrderShares();
+                if (quantity <= 0)
+                    return true;
+            }
+        }
     }
 
     return false;
@@ -166,8 +164,7 @@ bool OrderBook::canMatch(Side side, double price) const{
         if (asks.empty())
             return false;
 
-        //const auto& [bestAskPrice, _] = *asks.begin(); // Best Ask information
-        const auto& item = *asks.begin(); // Best Ask information
+        const auto& item = *asks.begin();
         double bestAskPrice = item.first;
 
         return (bestAskPrice <= price); 
@@ -176,8 +173,7 @@ bool OrderBook::canMatch(Side side, double price) const{
         if (bids.empty())
             return false;
 
-        //const auto& [bestBidPrice, _] = *bids.begin();
-        const auto& item = *bids.begin(); // Best Ask information
+        const auto& item = *bids.begin();
         double bestBidPrice = item.first;
 
         return (bestBidPrice >= price);
@@ -625,4 +621,3 @@ void OrderBook::writeLatencyStatsToFile(const std::string& filename, int nUpdate
     std::cout << "Latency statistics written to " << filename << std::endl;
     file.close();
 }
-
