@@ -1,74 +1,88 @@
 {
     "Add": [
         {
-            "latency_variance": 43063.723243750006,
-            "limit_level_status": "existing_limit_level",
-            "mean_latency": 1552.1024999999997,
-            "number_of_orders": 40,
-            "order_type": "FAK"
-        },
-        {
-            "latency_variance": 106468.51187145554,
+            "latency_variance (μs)": 317738.96836456814,
             "limit_level_status": "new_limit_level",
-            "mean_latency": 2157.282608695652,
-            "number_of_orders": 23,
-            "order_type": "FAK"
-        },
-        {
-            "latency_variance": 71187.89961538462,
-            "limit_level_status": "new_limit_level",
-            "mean_latency": 2067.4000000000005,
-            "number_of_orders": 52,
+            "mean_latency (μs)": 2220.3787162162153,
+            "number_of_orders": 592,
             "order_type": "GFD"
         },
         {
-            "latency_variance": 84594.17784328546,
+            "latency_variance (μs)": 0.0,
             "limit_level_status": "existing_limit_level",
-            "mean_latency": 2071.6269841269846,
-            "number_of_orders": 63,
-            "order_type": "GTC"
+            "mean_latency (μs)": 1439.9,
+            "number_of_orders": 1,
+            "order_type": "GFD"
         },
         {
-            "latency_variance": 1951209.7859277346,
-            "limit_level_status": "new_limit_level",
-            "mean_latency": 2327.1031249999996,
-            "number_of_orders": 64,
-            "order_type": "GTC"
-        },
-        {
-            "latency_variance": 129796.9643930224,
+            "latency_variance (μs)": 263106.1906656149,
             "limit_level_status": "existing_limit_level",
-            "mean_latency": 1842.522641509434,
-            "number_of_orders": 53,
+            "mean_latency (μs)": 1873.834358974359,
+            "number_of_orders": 585,
             "order_type": "FOK"
+        },
+        {
+            "latency_variance (μs)": 16141.702500000018,
+            "limit_level_status": "new_limit_level",
+            "mean_latency (μs)": 1807.35,
+            "number_of_orders": 2,
+            "order_type": "FOK"
+        },
+        {
+            "latency_variance (μs)": 130571.96634350518,
+            "limit_level_status": "existing_limit_level",
+            "mean_latency (μs)": 1678.0173913043482,
+            "number_of_orders": 322,
+            "order_type": "FAK"
+        },
+        {
+            "latency_variance (μs)": 261764.9768482966,
+            "limit_level_status": "new_limit_level",
+            "mean_latency (μs)": 2185.5965116279076,
+            "number_of_orders": 258,
+            "order_type": "FAK"
+        },
+        {
+            "latency_variance (μs)": 239502.74262261478,
+            "limit_level_status": "existing_limit_level",
+            "mean_latency (μs)": 2070.805093378606,
+            "number_of_orders": 589,
+            "order_type": "GTC"
+        },
+        {
+            "latency_variance (μs)": 1655418.4069715082,
+            "limit_level_status": "new_limit_level",
+            "mean_latency (μs)": 2269.631438127089,
+            "number_of_orders": 598,
+            "order_type": "GTC"
         }
     ],
     "Amend": [
         {
-            "latency_variance": 516541.6943619828,
+            "latency_variance (μs)": 671182.3784607565,
             "limit_level_status": "new_limit_level",
-            "mean_latency": 2101.2741042345287,
-            "number_of_orders": 614
+            "mean_latency (μs)": 2158.0096271748166,
+            "number_of_orders": 6035
         }
     ],
     "Cancel": [
         {
-            "latency_variance": 1298.4932495069038,
-            "limit_level_status": "last_in_limit_level",
-            "mean_latency": 14.42692307692308,
-            "number_of_orders": 78
+            "latency_variance (μs)": 689.6676975800774,
+            "limit_level_status": "not_last_in_limit_level",
+            "mean_latency (μs)": 13.998761061946912,
+            "number_of_orders": 565
         },
         {
-            "latency_variance": 5.050769230769233,
-            "limit_level_status": "not_last_in_limit_level",
-            "mean_latency": 12.5,
-            "number_of_orders": 13
+            "latency_variance (μs)": 22.589813596491226,
+            "limit_level_status": "last_in_limit_level",
+            "mean_latency (μs)": 9.975000000000007,
+            "number_of_orders": 456
         }
     ],
     "Match": {
-        "latency_variance": 2.8601018809868557,
+        "latency_variance (μs)": 24.210206518236507,
         "limit_level_status": "none",
-        "mean_latency": 6.0781716417910445,
-        "number_of_orders": 536
+        "mean_latency (μs)": 6.37523245984783,
+        "number_of_orders": 4732
     }
 }

@@ -133,7 +133,7 @@ int main(){
 
     std::string ordersFilename = "orders.json";
     std::string resultsFilename = "stats.json";
-    size_t nUpdates = 1000;
+    size_t nUpdates = 100000;
     
     OrderBook orderBook;
 
