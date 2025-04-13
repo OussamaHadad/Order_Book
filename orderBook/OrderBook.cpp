@@ -1,12 +1,17 @@
-#include "OrderBook.h"
-
 #include <thread>
 #include <shared_mutex>
 #include <algorithm>
 #include <numeric>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
+#include "OrderBook.h"
+
+using json = nlohmann::json;
+
+static std::unordered_map<Type, std::string> map_types = {{Type::GTC, "GTC"}, {Type::FAK, "FAK"}, {Type::FOK, "FOK"}, {Type::GFD, "GFD"}, {Type::M, "M"}};
+static std::unordered_map<Side, std::string> map_sides = {{Side::Bid, "Bid"}, {Side::Ask, "Ask"}};
 
 void OrderBook::cancelGFDOrders(uint32_t TRADING_CLOSE_HOUR){ 
     /*Cancel all Good For Day orders when the market closes at TRADING_CLOSE_HOUR*/
@@ -192,6 +197,7 @@ Trades OrderBook::matchOrders(){
         if (bids.empty() || asks.empty())
             break;
 
+        std::cout << "pre 4" << std::endl;
         auto& itemBid = *bids.begin();
         double bestBidPrice = itemBid.first;
         OrderPointers& bestBids = itemBid.second;
@@ -199,11 +205,13 @@ Trades OrderBook::matchOrders(){
         auto& itemAsk = *asks.begin();
         double bestAskPrice = itemAsk.first;
         OrderPointers& bestAsks = itemAsk.second;
+        std::cout << "post 4" << std::endl;
 
         // If the best bid price is less than the best ask price, no match is possible
         if (bestBidPrice < bestAskPrice)
             break;
 
+        std::cout << "pre 5" << std::endl;
         // Match orders at the best bid & ask prices
         while (!bestBids.empty() && !bestAsks.empty()){
 
@@ -245,9 +253,12 @@ Trades OrderBook::matchOrders(){
             auto end = std::chrono::high_resolution_clock::now(); // End of time computation
             std::chrono::duration<double, std::micro> latency = end - start;
 
+            std::cout << "due to latency" << std::endl;
             matchLatencies.push_back(latency.count());
         }
+        std::cout << "post 5" << std::endl;
 
+        std::cout << "pre 6" << std::endl;
         // Remove empty price levels
         if (bestBids.empty()){
             bids.erase(bestBidPrice);
@@ -258,23 +269,35 @@ Trades OrderBook::matchOrders(){
             asks.erase(bestAskPrice);
             // data.erase(bestAskPrice);
         }
+        std::cout << "post 6" << std::endl;
     }
 
+    std::cout << "pre 7" << std::endl;
     // Handle FAK orders
     if (!bids.empty()){
         auto& item = *bids.begin();
         OrderPointers& bestBids = item.second;
         auto headOrder = bestBids.front();
-        if (headOrder->getOrderType() == Type::FAK && headOrder->getOrderInitialShares() != headOrder->getOrderShares())
+        std::cout << "pre 7.1" << std::endl;
+        if (headOrder->getOrderType() == Type::FAK && headOrder->getOrderInitialShares() != headOrder->getOrderShares()){
+            std::cout << "pre 7.2" << std::endl;
             cancelOrder(headOrder->getOrderId());
+            std::cout << "pre 7.3" << std::endl;
+        }
     }
+    std::cout << "post 7" << std::endl;
 
+    std::cout << "pre 8" << std::endl;
     if (!asks.empty()){
         auto& item = *asks.begin();
         OrderPointers& bestAsks = item.second;
         auto headOrder = bestAsks.front();
-        if (headOrder->getOrderType() == Type::FAK && headOrder->getOrderInitialShares() != headOrder->getOrderShares())
+        std::cout << "pre 8.1" << std::endl;
+        if (headOrder->getOrderType() == Type::FAK && headOrder->getOrderInitialShares() != headOrder->getOrderShares()){
+            std::cout << "pre 8.2" << std::endl;
             cancelOrder(headOrder->getOrderId());
+        }
+        std::cout << "pre 8.3" << std::endl;
     }
 
     // Print trades
@@ -330,9 +353,6 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
 
     std::unique_lock<std::mutex> ordersLock{_mutex};
 
-    std::unordered_map<Type, std::string> map_types = {{Type::GTC, "GTC"}, {Type::FAK, "FAK"}, {Type::FOK, "FOK"}, {Type::GFD, "GFD"}, {Type::M, "M"}};
-    std::unordered_map<Side, std::string> map_sides = {{Side::Bid, "Bid"}, {Side::Ask, "Ask"}};
-
     if (newOrder)
         std::cout << "Adding Order: ID " << orderPtr->getOrderId()
                 << ", Side " << map_sides[orderPtr->getOrderSide()]
@@ -350,6 +370,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
         std::cout << "Order ID " << orderPtr->getOrderId() << " already exists. Skipping." << std::endl;
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};  // equivalent of None for the return type (Trades in this case)
     }
@@ -358,6 +379,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
         std::cout << "FAK order cannot be matched. Skipping." << std::endl;    
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};
     }
@@ -366,6 +388,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
         std::cout << "FOK order cannot be fully filled. Skipping." << std::endl;
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
         return {};
     }
@@ -387,6 +410,7 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
             std::cout << "Market order cannot be processed. Skipping." << std::endl;
             auto end = std::chrono::high_resolution_clock::now();
             std::chrono::duration<double, std::micro> latency = end - start;
+            std::cout << "due to latency" << std::endl;
             addLatencies[orderPtr->getOrderType()][0].push_back(latency.count()); // 0 is the default key
             return {};
         }
@@ -411,20 +435,28 @@ Trades OrderBook::addOrder(OrderPointer orderPtr, bool newOrder, double initLate
         return {};
     }
 
+    std::cout << "pre 1" << std::endl;
     orders.insert({orderPtr->getOrderId(), OrderInfo{orderPtr, iterator}});
+    std::cout << "post 1" << std::endl;
 
+    std::cout << "pre 2" << std::endl;
     auto addLatenciesKey = updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Add);
+    std::cout << "post 2" << std::endl;
 
+    std::cout << "pre 3" << std::endl;
     if (newOrder){
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         addLatencies[orderPtr->getOrderType()][addLatenciesKey].push_back(latency.count());
     }
     else{
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         amendLatencies[addLatenciesKey].push_back(initLatencyCount + latency.count()); // amendLatenciesKey not add...
     }
+    std::cout << "post 3" << std::endl;
 
     return matchOrders();
 }
@@ -439,19 +471,23 @@ void OrderBook::cancelOrder(uint32_t orderId, bool lockOn, bool amendedOrder){
     */
     auto start = std::chrono::high_resolution_clock::now();
 
+    std::cout << "canc 1" << std::endl;
     if (lockOn)
         std::unique_lock<std::mutex> ordersLock{_mutex};    
 
+    std::cout << "canc 2" << std::endl;
     if (orders.find(orderId) == orders.end())
         return;
 
     const auto& item = orders.at(orderId);
     OrderPointer orderPtr = item.order;
     OrderPointers::iterator orderIterator = item.orderIter; 
-
+    
+    std::cout << "canc 3" << std::endl;
     // Remove order from orders map
     orders.erase(orderId);
 
+    std::cout << "canc 4" << std::endl;
     // Remove order from asks or bids given its side
     const auto price = orderPtr->getOrderPrice();
 
@@ -468,12 +504,15 @@ void OrderBook::cancelOrder(uint32_t orderId, bool lockOn, bool amendedOrder){
             asks.erase(price);
     }
 
+    std::cout << "canc 5" << std::endl;
     // Update order's limit level
     auto cancelLatenciesKey = updateLimitLevelData(orderPtr->getOrderPrice(), orderPtr->getOrderShares(), Action::Remove);
 
+    std::cout << "due to latency" << std::endl;
     if (!amendedOrder){
         auto end = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double, std::micro> latency = end - start;
+        std::cout << "due to latency" << std::endl;
         cancelLatencies[cancelLatenciesKey].push_back(latency.count());
     }
 }
@@ -554,13 +593,9 @@ void OrderBook::clearLatencies() {
 
 
 void OrderBook::writeLatencyStatsToFile(const std::string& filename, int nUpdates) {
-    
     std::ofstream file(filename);
     if (!file.is_open())
         throw std::runtime_error("Failed to open file for writing latency statistics.");
-
-    // Header
-    file << "order,type,limit_level_status,mean_latency,latency_variance,number_of_orders\n";
 
     int totalTransactions = 0;
 
@@ -577,43 +612,71 @@ void OrderBook::writeLatencyStatsToFile(const std::string& filename, int nUpdate
         return {mean, variance};
     };
 
-    // Write Add Order latencies
+    json statsJson;
+
+    // Add Order Latencies
     for (const auto& type_latencyMap : addLatencies) {
-        auto orderType = static_cast<int>(type_latencyMap.first);
+        const auto& orderTypeStr = map_types[type_latencyMap.first];
+
         for (const auto& latencyEntry : type_latencyMap.second) {
-            int limitLevelStatus = latencyEntry.first;
+            std::string limitStatusStr = (latencyEntry.first == 0) ? "existing_limit_level" : "new_limit_level";
             auto stats = computeStats(latencyEntry.second);
 
-            file << "Add," << orderType << "," << limitLevelStatus << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+            statsJson["Add"].push_back({
+                {"order_type", orderTypeStr},
+                {"limit_level_status", limitStatusStr},
+                {"mean_latency (μs)", stats.first},
+                {"latency_variance (μs)", stats.second},
+                {"number_of_orders", latencyEntry.second.size()}
+            });
 
             totalTransactions += latencyEntry.second.size();
         }
     }
 
-    // Write Amend Order latencies
+    // Amend Order Latencies
     for (const auto& latencyEntry : amendLatencies) {
-        int limitLevelStatus = latencyEntry.first;
+        std::string limitStatusStr = (latencyEntry.first == 0) ? "existing_limit_level" : "new_limit_level";
         auto stats = computeStats(latencyEntry.second);
 
-        file << "Amend," << limitLevelStatus << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+        statsJson["Amend"].push_back({
+            {"limit_level_status", limitStatusStr},
+            {"mean_latency (μs)", stats.first},
+            {"latency_variance (μs)", stats.second},
+            {"number_of_orders", latencyEntry.second.size()}
+        });
 
         totalTransactions += latencyEntry.second.size();
     }
 
-    // Write Cancel Order latencies
+    // Cancel Order Latencies
     for (const auto& latencyEntry : cancelLatencies) {
+        std::string limitStatusStr = (latencyEntry.first == 0) ? "last_in_limit_level" : "not_last_in_limit_level";
         auto stats = computeStats(latencyEntry.second);
 
-        file << "Cancel," << latencyEntry.first << "," << stats.first << "," << stats.second << "," << latencyEntry.second.size() << "\n";
+        statsJson["Cancel"].push_back({
+            {"limit_level_status", limitStatusStr},
+            {"mean_latency (μs)", stats.first},
+            {"latency_variance (μs)", stats.second},
+            {"number_of_orders", latencyEntry.second.size()}
+        });
 
         totalTransactions += latencyEntry.second.size();
     }
 
-    // Write Match latencies
+    // Match Latencies
     auto matchStats = computeStats(matchLatencies);
-    file << "Match,-1, " << matchStats.first << "," << matchStats.second << "," << matchLatencies.size() << "\n";
+    statsJson["Match"] = {
+        {"limit_level_status", "none"},
+        {"mean_latency (μs)", matchStats.first},
+        {"latency_variance (μs)", matchStats.second},
+        {"number_of_orders", matchLatencies.size()}
+    };
 
-    // Verify that the total count equals nUpdates
+    // Write to file
+    file << std::setw(4) << statsJson << std::endl;
+
+    // Consistency check
     std::cout << "\nTotal Transactions Counted: " << totalTransactions << " | Expected: " << nUpdates << "\n";
     if (nUpdates != -1 && totalTransactions != nUpdates)
         throw std::runtime_error("Mismatch in total number of updates!");

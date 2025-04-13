@@ -5,50 +5,66 @@
 #include <chrono>
 #include <numeric>
 #include <cassert>
+#include <nlohmann/json.hpp>
 
 #include "Order.cpp"
 #include "OrderBook.cpp"
 
+//  compile: cl.exe /I "C:/Users/oussa/Desktop/vcpkg/installed/x64-windows/include" /EHsc /Fe:test.exe test.cpp
+//  execute: ./out:test.exe
+
+using json = nlohmann::json;
 
 // The following variables are made static to make then "non-importable" by other .h or .cpp files
 static std::unordered_map<std::string, Type> _map_types = {{"GTC", Type::GTC}, {"FAK", Type::FAK}, {"FOK", Type::FOK}, {"GFD", Type::GFD}, {"M", Type::M}};
 static std::unordered_map<std::string, Side> _map_sides = {{"Bid", Side::Bid}, {"Ask", Side::Ask}};
 
-auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook){
+auto populateOrderBook(const std::string& inputFilename, OrderBook& orderBook) {
     /*
-        Given an .txt file where each line consists of an order (Type Side Price Shares) and an orderBook (usually empty)
-        This function populates this orderBook with the orders figuring in the .txt file
+        Given a .json file where each element is an object:
+        {"type": "GTC", "side": "Bid", "price": 32.5, "shares": 100} 
+        This function populates the given orderBook with the orders from the JSON file.
     */
-    std::ifstream inputFile(inputFilename);
 
-    if (!inputFile.is_open()) {
+    std::ifstream inputFile(inputFilename);
+    if (!inputFile.is_open()){
         std::cerr << "Error: Cannot open file " << inputFilename << '\n';
         return -1;
     }
-    
-    std::string line;
+
+    json inputFileOrders;
+    try {
+        inputFile >> inputFileOrders;
+    } 
+    catch (const json::parse_error& e){
+        std::cerr << "Error: Failed to parse JSON file. " << e.what() << '\n';
+        return -1;
+    }
+
     int orderId = 1;
 
-    while (std::getline(inputFile, line)){
-        std::istringstream iss(line);
+    for (const auto& orderEntry : inputFileOrders){
+        try{
+            std::string typeStr = orderEntry.at("type");
+            std::string sideStr = orderEntry.at("side");
+            double price = orderEntry.at("price");
+            int shares = orderEntry.at("shares");
 
-        std::string typeStr, sideStr;
-        double price;
-        int shares;
-        
-        if (!(iss >> typeStr >> sideStr >> price >> shares)){
-            std::cerr << "Warning: Could not parse line: " << orderId << '\n';
-            continue;   // Move to next order
+            auto order = std::make_shared<Order>(orderId, _map_types[typeStr], _map_sides[sideStr], price, shares);
+
+            orderBook.addOrder(order);
+            ++orderId;
+        } 
+        catch (const json::out_of_range& e){
+            std::cerr << "Warning: Missing fields in order " << orderId << ". Skipping. " << e.what() << '\n';
+        } 
+        catch (const std::exception& e){
+            std::cerr << "Warning: Failed to process order " << orderId << ". " << e.what() << '\n';
         }
-        
-        auto order = std::make_shared<Order>(orderId, _map_types[typeStr], _map_sides[sideStr], price, shares);
-        orderBook.addOrder(order);
-        ++orderId;
     }
-    
-    inputFile.close();
 
-    return orderId;
+    inputFile.close();
+    return orderId; // Id of the next order in case we add any
 }
 
 
@@ -115,15 +131,15 @@ void updateOrderBook(OrderBook& orderBook, int nUpdates, uint32_t newOrderId,
 int main(){
     std::mt19937 rng(42);  // 42 is the seed
 
-    std::string ordersFilename = "orders.txt";
-    std::string resultsFilename = "stats.txt";
+    std::string ordersFilename = "orders.json";
+    std::string resultsFilename = "stats.json";
     size_t nUpdates = 1000;
     
     OrderBook orderBook;
 
     size_t nextOrderId = populateOrderBook(ordersFilename, orderBook);
     std::cout << "\n ******************** \n Order Book initialized and populated with " 
-          << nextOrderId 
+          << (nextOrderId - 1) 
           << " orders \n ********************  \n" << std::endl;
     //orderBook.printOrderBook();
 

@@ -1,0 +1,74 @@
+{
+    "Add": [
+        {
+            "latency_variance": 43063.723243750006,
+            "limit_level_status": "existing_limit_level",
+            "mean_latency": 1552.1024999999997,
+            "number_of_orders": 40,
+            "order_type": "FAK"
+        },
+        {
+            "latency_variance": 106468.51187145554,
+            "limit_level_status": "new_limit_level",
+            "mean_latency": 2157.282608695652,
+            "number_of_orders": 23,
+            "order_type": "FAK"
+        },
+        {
+            "latency_variance": 71187.89961538462,
+            "limit_level_status": "new_limit_level",
+            "mean_latency": 2067.4000000000005,
+            "number_of_orders": 52,
+            "order_type": "GFD"
+        },
+        {
+            "latency_variance": 84594.17784328546,
+            "limit_level_status": "existing_limit_level",
+            "mean_latency": 2071.6269841269846,
+            "number_of_orders": 63,
+            "order_type": "GTC"
+        },
+        {
+            "latency_variance": 1951209.7859277346,
+            "limit_level_status": "new_limit_level",
+            "mean_latency": 2327.1031249999996,
+            "number_of_orders": 64,
+            "order_type": "GTC"
+        },
+        {
+            "latency_variance": 129796.9643930224,
+            "limit_level_status": "existing_limit_level",
+            "mean_latency": 1842.522641509434,
+            "number_of_orders": 53,
+            "order_type": "FOK"
+        }
+    ],
+    "Amend": [
+        {
+            "latency_variance": 516541.6943619828,
+            "limit_level_status": "new_limit_level",
+            "mean_latency": 2101.2741042345287,
+            "number_of_orders": 614
+        }
+    ],
+    "Cancel": [
+        {
+            "latency_variance": 1298.4932495069038,
+            "limit_level_status": "last_in_limit_level",
+            "mean_latency": 14.42692307692308,
+            "number_of_orders": 78
+        },
+        {
+            "latency_variance": 5.050769230769233,
+            "limit_level_status": "not_last_in_limit_level",
+            "mean_latency": 12.5,
+            "number_of_orders": 13
+        }
+    ],
+    "Match": {
+        "latency_variance": 2.8601018809868557,
+        "limit_level_status": "none",
+        "mean_latency": 6.0781716417910445,
+        "number_of_orders": 536
+    }
+}
