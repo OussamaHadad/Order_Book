@@ -1,8 +1,10 @@
 import random
 import matplotlib.pyplot as plt
-import json
+from datetime import datetime
+import mysql.connector
+from getpass import getpass  # Hides password input
 
-def generate_orders(output_file_name: str, nOrders: int, 
+def generate_orders(cursor: mysql.connector.cursor, tableName: str, nOrders: int, 
                     ratioGTC: float = 0.6, ratioFAK: float = 0.1, ratioFOK: float = 0.1, ratioGFD: float = 0.1, ratioM: float = 0.1, 
                     ratioBid: float = 0.5, ratioAsk: float = 0.5, 
                     minBidPrice: float = 30.00, maxBidPrice: float = 40.00,
@@ -55,49 +57,40 @@ def generate_orders(output_file_name: str, nOrders: int,
     prices_bid = [round(random.uniform(minBidPrice, maxBidPrice), 2) for _ in range(total_bid_orders)]
     prices_ask = [round(random.uniform(minAskPrice, maxAskPrice), 2) for _ in range(total_ask_orders)]
 
-    orders = []
+    actual_side_counts = {s: 0 for s in side_types}
+    actual_order_counts = {s: {t: 0 for t in order_types} for s in side_types}
 
     # Generate Bid Orders
     for order_type, count in order_counts_bid.items():
         for _ in range(count):
             price = prices_bid.pop()
             shares = random.randint(1, 1000)
-            orders.append({
-                "type": order_type,
-                "side": "Bid",
-                "price": price,
-                "shares": shares
-            })
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')    # Get current timestamp as a string
+
+            cursor.execute(f""" INSERT INTO {tableName} (price, shares, side, type)
+                                VALUES (%s, %s, %s, %s) """, 
+                            (price, shares, "Bid", order_type)
+            )
+
+            actual_side_counts["Bid"] += 1
+            actual_order_counts["Bid"][order_type] += 1
 
     # Generate Ask Orders
     for order_type, count in order_counts_ask.items():
         for _ in range(count):
             price = prices_ask.pop()
             shares = random.randint(1, 1000)
-            orders.append({
-                "type": order_type,
-                "side": "Ask",
-                "price": price,
-                "shares": shares
-            })
 
-    # Shuffle order list for randomness
-    random.shuffle(orders)
+            cursor.execute(f""" INSERT INTO {tableName} (price, shares, side, type)
+                                VALUES (%s, %s, %s, %s) """, 
+                            (price, shares, "Ask", order_type)
+            )
 
-    # Save to JSON file
-    with open(output_file_name, "w") as f:
-        json.dump(orders, f, indent=2)
+            actual_side_counts["Ask"] += 1  
+            actual_order_counts["Ask"][order_type] += 1
 
-    print(f"File {output_file_name} generated with {nOrders} orders.")
 
-    # Compute actual ratios
-    total_orders = len(orders)
-    actual_side_counts = {s: sum(1 for order in orders if order["side"] == s) for s in side_types}
-    actual_order_counts = {
-        s: {t: sum(1 for order in orders if order["side"] == s and order["type"] == t) for t in order_types}
-        for s in side_types
-    }
-
+    total_orders = sum(actual_side_counts.values())
     print("Actual Ratios:")
     for side in side_types:
         print(f"{side}: {actual_side_counts[side] / total_orders:.2%}")
@@ -125,5 +118,41 @@ def generate_orders(output_file_name: str, nOrders: int,
 
 if __name__ == "__main__":
     random.seed(42)  # For reproducibility
-    # Example usage
-    generate_orders("../orderBook/orders.json", nOrders = 10000)
+
+    # Get Database Configuration information from user
+    host = input("Enter host: ")
+    user = input("Enter user: ")
+    password = getpass("Enter password: ")
+    databaseName = input("Enter database name: ")
+
+    # Database Configuration
+    DB_CONFIG = {'host': host, 'user': user, 'password': password, 'database': databaseName}
+    del host, user, password    # Clear data from memory
+
+    database = mysql.connector.connect(**DB_CONFIG) # Connect to the database
+    print(f"Successfully connected to Database {databaseName}!")
+
+    cursor = database.cursor()
+
+    # Create Database
+    cursor.execute(f"CREATE DATABASE IF NOT EXISTS {databaseName}")
+    cursor.execute(f"USE {databaseName}")
+    # Create Table
+    tableName = "orders"
+    cursor.execute(f"DROP TABLE IF EXISTS {tableName}")
+    cursor.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {tableName} (
+                        orderId INT AUTO_INCREMENT PRIMARY KEY,
+                        price FLOAT,
+                        shares INT,
+                        side VARCHAR(3),
+                        type VARCHAR(3),
+                        timestamp DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)
+                    )
+    """)
+
+    # Generate orders & Insert them in table
+    generate_orders(cursor, tableName, nOrders = 3000)
+
+    database.commit()  # Commit the changes to the database
+    cursor.close()  # Close the cursor
